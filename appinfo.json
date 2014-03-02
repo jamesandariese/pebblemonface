@@ -1,0 +1,18 @@
+{
+  "uuid": "cde5d59b-e08a-439c-b726-0b74bd479c74",
+  "shortName": "PebblemonFace",
+  "longName": "PebblemonFace",
+  "companyName": "James Andariese",
+  "versionCode": 1,
+  "versionLabel": "1.0.0",
+  "watchapp": {
+    "watchface": true
+  },
+  "appKeys": {
+    "KEY_MARQUEE": 1,
+    "KEY_NOTIFICATION": 2
+  },
+  "resources": {
+    "media": []
+  }
+}
