@@ -17,7 +17,7 @@ char date_buffer[TEXT_BUFFER_SIZE + 1];
 char status_buffer[TEXT_BUFFER_SIZE + 1];
 
 TextLayer *marquee_layer, *time_layer, *date_layer, *weekday_layer;
-TextLayer *status_layer;
+TextLayer *status_layer, *battery_layer;
 
 static TextLayer* init_text_layer(GRect location, GColor colour, GColor background, const char *res_id, GTextAlignment alignment)
 {
@@ -60,34 +60,35 @@ void tick_callback(struct tm *tick_time, TimeUnits units_changed)
 void window_load(Window *window) {
   app_log(APP_LOG_LEVEL_DEBUG, "pebblemonface.c", __LINE__, "window_load");
   window_set_background_color(window,GColorBlack);
+
+  status_layer = init_text_layer(GRect(8, 8, 128, 160), GColorWhite, GColorClear, FONT_KEY_GOTHIC_14, GTextAlignmentLeft);
+  battery_layer = init_text_layer(GRect(8, 8, 128, 160), GColorWhite, GColorClear, FONT_KEY_GOTHIC_14, GTextAlignmentRight);
+  weekday_layer = init_text_layer(GRect(8, 52, 128, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
+  date_layer = init_text_layer(GRect(8, 75, 128, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
   
-  status_layer = init_text_layer(GRect(8, 8, 144, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
-  weekday_layer = init_text_layer(GRect(8, 52, 144, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
-  date_layer = init_text_layer(GRect(8, 75, 144, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
+
+  time_layer = init_text_layer(GRect(0, 100, 144, 168), GColorWhite, GColorClear, FONT_KEY_ROBOTO_BOLD_SUBSET_49, GTextAlignmentCenter);
+  
+  tick_timer_service_subscribe(MINUTE_UNIT, (TickHandler) tick_callback);
+  
+  //Get a time structure so that the face doesn't start blank
+  struct tm *t;
+  time_t temp;
+  temp = time(NULL);
+  t = localtime(&temp);
+  
+  //Manually call the tick handler when the window is loading
+  tick_callback(t, MINUTE_UNIT);
   
 
-    time_layer = init_text_layer(GRect(0, 100, 144, 168), GColorWhite, GColorClear, FONT_KEY_ROBOTO_BOLD_SUBSET_49, GTextAlignmentCenter);
-
-    tick_timer_service_subscribe(MINUTE_UNIT, (TickHandler) tick_callback);
-
-    //Get a time structure so that the face doesn't start blank
-#if 0
-    struct tm *t;
-    time_t temp;
-    temp = time(NULL);
-    t = localtime(&temp);
- 
-    //Manually call the tick handler when the window is loading
-    tick_callback(t, MINUTE_UNIT);
-#endif
-
-    Layer *window_layer = window_get_root_layer(window);
-    
-    layer_add_child(window_layer, (Layer *)time_layer);
-    layer_add_child(window_layer, (Layer *)date_layer);
-    layer_add_child(window_layer, (Layer *)weekday_layer);
-    layer_add_child(window_layer, (Layer *)status_layer);
-
+  Layer *window_layer = window_get_root_layer(window);
+  
+  layer_add_child(window_layer, (Layer *)time_layer);
+  layer_add_child(window_layer, (Layer *)date_layer);
+  layer_add_child(window_layer, (Layer *)weekday_layer);
+  layer_add_child(window_layer, (Layer *)status_layer);
+  layer_add_child(window_layer, (Layer *)battery_layer);
+  
 }
   
 void window_unload(Window *window) {
@@ -130,6 +131,17 @@ static void set_connection_unknown() {
     connected = CONNECTED_UNKNOWN;
     update_status();
   }
+}
+
+static void handle_battery(BatteryChargeState charge_state) {
+  static char battery_text[] = "100%";
+
+  if (charge_state.is_charging) {
+    snprintf(battery_text, sizeof(battery_text), "+++");
+  } else {
+    snprintf(battery_text, sizeof(battery_text), "%d%%", charge_state.charge_percent);
+  }
+  text_layer_set_text(battery_layer, battery_text);
 }
 
 
@@ -187,6 +199,10 @@ void init() {
   window_stack_push(window, true);
   app_message_init();
   ping_app_message();
+
+  battery_state_service_subscribe(handle_battery);
+  BatteryChargeState charge_state = battery_state_service_peek();
+  handle_battery(charge_state);
 
   app_log(APP_LOG_LEVEL_DEBUG, "pebblemonface.c", __LINE__, "Done Initializing"); 
 }
