@@ -9,12 +9,15 @@ Window* window;
 
 #define TEXT_BUFFER_SIZE 32
 
+static void ping_app_message(void);
+
 char time_buffer[TEXT_BUFFER_SIZE + 1];
 char weekday_buffer[TEXT_BUFFER_SIZE + 1];
 char date_buffer[TEXT_BUFFER_SIZE + 1];
-
+char status_buffer[TEXT_BUFFER_SIZE + 1];
 
 TextLayer *marquee_layer, *time_layer, *date_layer, *weekday_layer;
+TextLayer *status_layer;
 
 static TextLayer* init_text_layer(GRect location, GColor colour, GColor background, const char *res_id, GTextAlignment alignment)
 {
@@ -33,6 +36,9 @@ void tick_callback(struct tm *tick_time, TimeUnits units_changed)
   /*switch (units_changed) {
   case SECOND_UNIT:
   strftime(time_buffer + */
+  if (units_changed == MINUTE_UNIT) {
+    ping_app_message();
+  }
   
   strftime(date_buffer, TEXT_BUFFER_SIZE, "%B", tick_time);
   int dpos = strlen(date_buffer);
@@ -55,6 +61,7 @@ void window_load(Window *window) {
   app_log(APP_LOG_LEVEL_DEBUG, "pebblemonface.c", __LINE__, "window_load");
   window_set_background_color(window,GColorBlack);
   
+  status_layer = init_text_layer(GRect(8, 8, 144, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
   weekday_layer = init_text_layer(GRect(8, 52, 144, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
   date_layer = init_text_layer(GRect(8, 75, 144, 160), GColorWhite, GColorClear, FONT_KEY_ROBOTO_CONDENSED_21, GTextAlignmentLeft);
   
@@ -79,15 +86,97 @@ void window_load(Window *window) {
     layer_add_child(window_layer, (Layer *)time_layer);
     layer_add_child(window_layer, (Layer *)date_layer);
     layer_add_child(window_layer, (Layer *)weekday_layer);
+    layer_add_child(window_layer, (Layer *)status_layer);
 
 }
   
 void window_unload(Window *window) {
   text_layer_destroy(time_layer);
 }
+
+#define CONNECTED_NO 0
+#define CONNECTED_YES 1
+#define CONNECTED_UNKNOWN 2
+
+static char appmessage_open_p = 0;
+static char connected = CONNECTED_UNKNOWN;
+
+void update_status() {
+  if (connected == CONNECTED_YES) {
+    text_layer_set_text(status_layer, "connected");
+  } else if (connected == CONNECTED_NO) {
+    text_layer_set_text(status_layer, "disconnected");
+  } else {
+    text_layer_set_text(status_layer, "unknown");
+  }
+}
+
+static void set_connected() {
+  if (connected != CONNECTED_YES) {
+    connected = CONNECTED_YES;
+    update_status();
+  }
+}
+
+static void set_disconnected() {
+  if (connected != CONNECTED_NO) {
+    connected = CONNECTED_NO;
+    update_status();
+  }
+}
+
+static void set_connection_unknown() {
+  if (connected != CONNECTED_UNKNOWN) {
+    connected = CONNECTED_UNKNOWN;
+    update_status();
+  }
+}
+
+
+static void outbox_sent_handler(DictionaryIterator *failed, void *context) {
+  set_connected();
+}
+
+static void outbox_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context) {
+  set_disconnected();
+}
+
+static void ping_app_message() {
+  DictionaryIterator *iterator;
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    set_disconnected();
+    return;
+  }
   
+  if (dict_write_cstring(iterator, 1, "ping") != DICT_OK) {
+    set_connection_unknown();
+    return;
+  }
+  if (app_message_outbox_send() != APP_MSG_OK) {
+    set_disconnected();
+    return;
+  }
+}
+
+void app_message_init() {
+  app_message_register_outbox_sent(outbox_sent_handler);
+  app_message_register_outbox_failed(outbox_failed_handler);
+  
+  AppMessageResult open_res = app_message_open(APP_MESSAGE_INBOX_SIZE_MINIMUM, APP_MESSAGE_OUTBOX_SIZE_MINIMUM);
+  if (open_res != APP_MSG_OK) {
+    connected = 0;
+    return;
+  }
+  
+  update_status();
+  ping_app_message();
+}
+
 void init() {
-  time_buffer[TEXT_BUFFER_SIZE] = date_buffer[TEXT_BUFFER_SIZE] = weekday_buffer[TEXT_BUFFER_SIZE] = '\0';
+  time_buffer[TEXT_BUFFER_SIZE] =
+    date_buffer[TEXT_BUFFER_SIZE] =
+    weekday_buffer[TEXT_BUFFER_SIZE] =
+    status_buffer[TEXT_BUFFER_SIZE] = '\0';
 
   window = window_create();
   WindowHandlers handlers = {
@@ -96,13 +185,16 @@ void init() {
   };
   window_set_window_handlers(window, handlers);
   window_stack_push(window, true);
-  app_log(APP_LOG_LEVEL_DEBUG, "pebblemonface.c", __LINE__, "Done Initializing");
- 
+  app_message_init();
+  ping_app_message();
+
+  app_log(APP_LOG_LEVEL_DEBUG, "pebblemonface.c", __LINE__, "Done Initializing"); 
 }
   
 void deinit() {
   window_destroy(window);
   tick_timer_service_unsubscribe();
+  app_message_deregister_callbacks();
 }
   
 int main(void) {

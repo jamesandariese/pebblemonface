@@ -1,3 +1,9 @@
+Pebble.addEventListener("appmessage",
+  function(e) {
+    console.log("Received message: " + e.payload);
+  }
+);
+
 function HTTPGETJSON(url) {
     var req = new XMLHttpRequest();
     req.open("GET", url, false);
