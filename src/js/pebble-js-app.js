@@ -1,8 +1,11 @@
+var lastMessageId = null;
+
 Pebble.addEventListener("appmessage",
-  function(e) {
-    console.log("Received message: " + e.payload);
-  }
-);
+			function(e) {
+			    console.log("Received message: " + e.payload);
+			    getOneMessage();
+			}
+		       );
 
 function HTTPGETJSON(url) {
     var req = new XMLHttpRequest();
@@ -33,11 +36,15 @@ function getOneMessage() {
         }
         var title = json.response.title;
         var message = json.response.message;
-        console.log("---");
-        console.log(title);
-        console.log(message);
-        console.log("---");
-        Pebble.showSimpleNotificationOnPebble(title, message);
+        var id = json.response.id;
+        if (id != lastMessageId) {
+          console.log("---");
+          console.log(title);
+          console.log(message);
+          console.log("---");
+          Pebble.showSimpleNotificationOnPebble(title, message);
+          lastMessageId = id;
+        }
       } else {
         console.log("Error");
       }
