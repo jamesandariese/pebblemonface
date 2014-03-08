@@ -36,9 +36,7 @@ void tick_callback(struct tm *tick_time, TimeUnits units_changed)
   /*switch (units_changed) {
   case SECOND_UNIT:
   strftime(time_buffer + */
-  if (units_changed == MINUTE_UNIT) {
-    ping_app_message();
-  }
+  ping_app_message();
   
   strftime(date_buffer, TEXT_BUFFER_SIZE, "%B", tick_time);
   int dpos = strlen(date_buffer);
@@ -155,6 +153,9 @@ static void outbox_failed_handler(DictionaryIterator *failed, AppMessageResult r
 
 static void ping_app_message() {
   DictionaryIterator *iterator;
+  
+  app_log(APP_LOG_LEVEL_DEBUG, "pebblemonface.c", __LINE__, "PING");
+
   if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
     set_disconnected();
     return;
